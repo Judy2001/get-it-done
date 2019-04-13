@@ -1,5 +1,6 @@
 from flask import Flask, request, redirect, render_template, session, flash
 from flask_sqlalchemy import SQLAlchemy
+from hashutils import make_pw_hash, check_pw_hash
 
 
 app = Flask(__name__)
@@ -15,21 +16,24 @@ class Task(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     name = db.Column(db.String(120))
     completed = db.Column(db.Boolean)
+    owner_id = db.Column(db.Integer, db.ForeignKey('user.id'))
 
-    def __init__(self, name):
+    def __init__(self, name, owner):
         self.name = name
         self.completed = False
+        self.owner = owner
 
 
 class User(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     email = db.Column(db.String(120), unique=True)
-    password = db.Column(db.String(120))
+    pw_hash = db.Column(db.String(120))
+    tasks = db.relationship('Task', backref='owner')
 
     def __init__(self, email, password):
         self.email = email
-        self.password = password
+        self.pw_hash = make_pw_hash(password)
 
 
 @app.before_request
@@ -45,7 +49,7 @@ def login():
         email = request.form['email']
         password = request.form['password']
         user = User.query.filter_by(email=email).first()
-        if user and user.password == password:
+        if user and check_pw_hash(password, user.pw_hash):
             session['email'] = email
             flash("Logged in")
             return redirect('/')
@@ -88,14 +92,16 @@ def logout():
 @app.route('/', methods=['POST', 'GET'])
 def index():
 
+    owner = User.query.filter_by(email=session['email']).first()
+
     if request.method == 'POST':
         task_name = request.form['task']
-        new_task = Task(task_name)
+        new_task = Task(task_name, owner)
         db.session.add(new_task)
         db.session.commit()
 
-    tasks = Task.query.filter_by(completed=False).all()
-    completed_tasks = Task.query.filter_by(completed=True).all()
+    tasks = Task.query.filter_by(completed=False, owner=owner).all()
+    completed_tasks = Task.query.filter_by(completed=True, owner=owner).all()
     return render_template('todos.html',title="Get It Done!", 
         tasks=tasks, completed_tasks=completed_tasks)
 
