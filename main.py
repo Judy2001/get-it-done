@@ -76,7 +76,7 @@ def register():
             session['email'] = email
             return redirect('/')
         else:
-            
+            # TODO - better response message
             return '<h1>Duplicate user</h1>'
 
 
